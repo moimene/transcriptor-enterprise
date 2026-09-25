@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { UploadZone } from "@/components/UploadZone";
 import { ProgressTracker } from "@/components/ProgressTracker";
 import { TranscriptionStudio } from "@/components/TranscriptionStudio";
 import { extractAudioFromVideo } from "@/lib/audioExtractor";
 import { ProcessingStep, TranscriptionResponse } from "@/lib/types";
-import { ShieldCheck, Zap, Lock, RefreshCw } from "lucide-react";
+import { ShieldCheck, Zap, Lock, RefreshCw, BookmarkCheck, Trash2 } from "lucide-react";
+
+const STORAGE_KEY = "transcriptor_saved_session";
 
 export default function Home() {
   const [step, setStep] = useState<ProcessingStep>("idle");
@@ -16,8 +18,36 @@ export default function Home() {
   const [result, setResult] = useState<TranscriptionResponse | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
+  const [restoredFromStorage, setRestoredFromStorage] = useState(false);
+
+  const audioUrlRef = useRef<string | null>(null);
+  audioUrlRef.current = audioUrl;
 
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  const internalApiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY || "";
+
+  // 1. Restore saved session from localStorage on initial load
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.result?.transcription?.text) {
+          setResult(parsed.result);
+          setStep("completed");
+          setRestoredFromStorage(true);
+        }
+      }
+    } catch (e) {
+      console.warn("No se pudo restaurar la sesión guardada:", e);
+    }
+
+    return () => {
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+      }
+    };
+  }, []);
 
   const handleStartProcessing = async (
     file: File,
@@ -30,8 +60,12 @@ export default function Home() {
   ) => {
     setErrorDetails(null);
     setResult(null);
+    setRestoredFromStorage(false);
 
-    // Create an object URL for playback
+    // Revoke previous audio URL if any
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
     const localAudioUrl = URL.createObjectURL(file);
     setAudioUrl(localAudioUrl);
 
@@ -55,10 +89,10 @@ export default function Home() {
         }
       }
 
-      // 2. Uploading & Processing
+      // 2. Uploading & Server Processing
       setStep("uploading");
       setStatusMessage("Subiendo archivo al motor de procesamiento...");
-      setProgressPercent(35);
+      setProgressPercent(30);
 
       const formData = new FormData();
       formData.append("file", fileToUpload);
@@ -66,32 +100,60 @@ export default function Home() {
       if (options.prompt) formData.append("prompt", options.prompt);
       formData.append("generate_summary", String(options.generateSummary));
 
-      // Visual simulation stages during server processing
+      // Animated progress transition during server processing
       setStep("compressing");
-      setStatusMessage("FFmpeg optimizando audio a 16kHz mono (32kbps)...");
+      setStatusMessage("Optimizando y analizando audio en el servidor...");
       setProgressPercent(50);
+
+      const headers: HeadersInit = {};
+      if (internalApiKey) {
+        headers["X-API-Key"] = internalApiKey;
+      }
 
       const response = await fetch(`${backendUrl}/api/transcribe/file`, {
         method: "POST",
+        headers,
         body: formData,
       });
 
       if (!response.ok) {
         const errJson = await response.json().catch(() => ({ detail: "Error del servidor" }));
-        throw new Error(errJson.detail || `Error en la petición: ${response.statusText}`);
+        let errMsg = "Error en la petición";
+        if (typeof errJson.detail === "string") {
+          errMsg = errJson.detail;
+        } else if (Array.isArray(errJson.detail)) {
+          errMsg = errJson.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        } else if (errJson.detail) {
+          errMsg = JSON.stringify(errJson.detail);
+        }
+        throw new Error(errMsg);
       }
 
       setStep("transcribing");
-      setStatusMessage("OpenAI Whisper-1 generando transcripción con marcas de tiempo...");
+      setStatusMessage("Whisper procesando transcripción y marcas de tiempo...");
       setProgressPercent(80);
 
       if (options.generateSummary) {
         setStep("summarizing");
-        setStatusMessage("GPT-4o-mini extrayendo puntos clave, acuerdos y tareas...");
+        setStatusMessage("GPT-4o-mini generando puntos clave y acuerdos...");
         setProgressPercent(95);
       }
 
       const data: TranscriptionResponse = await response.json();
+
+      // Persist in localStorage for resilience against accidental refreshes
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            result: data,
+            filename: file.name,
+            savedAt: new Date().toISOString(),
+          })
+        );
+      } catch (storageErr) {
+        console.warn("No se pudo guardar la transcripción en localStorage:", storageErr);
+      }
 
       setResult(data);
       setStep("completed");
@@ -115,6 +177,12 @@ export default function Home() {
     setProgressPercent(0);
     setStatusMessage("");
     setErrorDetails(null);
+    setRestoredFromStorage(false);
+  };
+
+  const handleClearSavedSession = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    handleReset();
   };
 
   return (
@@ -122,13 +190,30 @@ export default function Home() {
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        {restoredFromStorage && step === "completed" && (
+          <div className="mb-6 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
+            <div className="flex items-center space-x-2.5 text-emerald-800 dark:text-emerald-300 text-xs sm:text-sm font-medium">
+              <BookmarkCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Sesión anterior recuperada automáticamente de la memoria local del navegador.</span>
+            </div>
+            <button
+              onClick={handleClearSavedSession}
+              className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors"
+              title="Borrar memoria local y comenzar de cero"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Nueva transcripción</span>
+            </button>
+          </div>
+        )}
+
         {step === "idle" && (
           <div className="space-y-10">
             {/* Hero Header */}
             <div className="text-center max-w-2xl mx-auto space-y-4">
               <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold border border-indigo-200 dark:border-indigo-800">
                 <Zap className="w-3.5 h-3.5" />
-                <span>Audio Engine Corporativo v1.0</span>
+                <span>Audio Engine Corporativo v1.1</span>
               </div>
               <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-zinc-900 dark:text-white">
                 Convierte tus reuniones y vídeos en{" "}
@@ -137,8 +222,8 @@ export default function Home() {
                 </span>
               </h1>
               <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400">
-                Extracción de audio ultrarrápida, subtítulos sincronizados (SRT/VTT) para Premiere y
-                minutas ejecutivas automáticas con la máxima privacidad de datos.
+                Extracción de audio de alta fidelidad, subtítulos sincronizados (SRT/VTT) y
+                minutas ejecutivas automáticas con persistencia de datos y privacidad estricta.
               </p>
             </div>
 
@@ -165,11 +250,11 @@ export default function Home() {
                   <Zap className="w-4 h-4" />
                 </div>
                 <h3 className="font-semibold text-sm text-zinc-900 dark:text-white">
-                  Compresión de Voz a 32kbps
+                  Persistencia & Memoria Local
                 </h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                  FFmpeg extrae la pista de voz en mono a 16kHz. 1 hora de audio se comprime a ~14 MB,
-                  evitando cortes y desincronización de subtítulos.
+                  Base de datos estructurada en el servidor y almacenamiento local en navegador para no
+                  perder nunca tu transcripción ante un refresco accidental de pantalla.
                 </p>
               </div>
 

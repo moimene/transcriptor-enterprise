@@ -1,0 +1,5 @@
+MOI-221	S1 · Evitar la pérdida de transcripciones guardando los trabajos en base de datos persistente con borrado automático
+MOI-222	S2 · Proteger el servicio cerrando el acceso público sin clave y restringiendo los dominios y ficheros autorizados
+MOI-223	S3 · Evitar el colapso del servidor procesando el audio en segundo plano y añadiendo límites de tiempo y reintentos
+MOI-224	S4 · Mostrar el avance real del trabajo en la pantalla y conservar las transcripciones en el navegador ante recargas
+MOI-225	S5 · Comprobar de extremo a extremo que el servicio procesa audios reales y responde con normalidad en producción

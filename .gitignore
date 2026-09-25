@@ -27,6 +27,9 @@ tmp/
 temp_audio/
 temp_chunks/
 .DS_Store
+*.db
+*.sqlite
+*.sqlite3
 
 # Secrets
 .env

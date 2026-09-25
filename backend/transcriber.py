@@ -1,7 +1,9 @@
 import logging
 import math
 import os
+import time
 from typing import Any, Dict, List, Optional
+import openai
 from openai import OpenAI
 from config import settings
 
@@ -38,7 +40,11 @@ class TranscriptionService:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.OPENAI_API_KEY
         if self.api_key:
-            self.client = OpenAI(api_key=self.api_key)
+            self.client = OpenAI(
+                api_key=self.api_key,
+                timeout=settings.OPENAI_TIMEOUT_SECONDS,
+                max_retries=3
+            )
         else:
             self.client = None
 
@@ -47,26 +53,46 @@ class TranscriptionService:
         chunk_file_path: str,
         language: Optional[str] = None,
         prompt: Optional[str] = None,
-        temperature: float = 0.0
+        temperature: float = 0.0,
+        max_attempts: int = 3
     ) -> Dict[str, Any]:
-        """Calls OpenAI Whisper API on a single chunk with verbose_json for granular timestamps."""
+        """Calls OpenAI Whisper API on a single chunk with verbose_json, retries and backoff."""
         if not self.client:
             raise ValueError("OPENAI_API_KEY no está configurada.")
 
-        with open(chunk_file_path, "rb") as audio_file:
-            kwargs = {
-                "model": settings.WHISPER_MODEL,
-                "file": audio_file,
-                "response_format": "verbose_json",
-                "temperature": temperature
-            }
-            if language:
-                kwargs["language"] = language
-            if prompt:
-                kwargs["prompt"] = prompt
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with open(chunk_file_path, "rb") as audio_file:
+                    kwargs = {
+                        "model": settings.WHISPER_MODEL,
+                        "file": audio_file,
+                        "response_format": "verbose_json",
+                        "temperature": temperature
+                    }
+                    if language:
+                        kwargs["language"] = language
+                    if prompt:
+                        kwargs["prompt"] = prompt
 
-            response = self.client.audio.transcriptions.create(**kwargs)
-            return response.to_dict()
+                    response = self.client.audio.transcriptions.create(**kwargs)
+
+                    if hasattr(response, "model_dump"):
+                        return response.model_dump()
+                    elif hasattr(response, "to_dict"):
+                        return response.to_dict()
+                    return dict(response)
+
+            except (openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError) as e:
+                last_error = e
+                backoff = 2 ** attempt
+                logger.warning(f"Error transitorio en Whisper (intento {attempt}/{max_attempts}): {e}. Reintentando en {backoff}s...")
+                time.sleep(backoff)
+            except Exception as e:
+                logger.error(f"Error no recuperable en Whisper: {e}")
+                raise
+
+        raise last_error or RuntimeError("Fallaron todos los reintentos de transcripción del chunk.")
 
     def transcribe_and_merge(
         self,
@@ -76,19 +102,26 @@ class TranscriptionService:
     ) -> Dict[str, Any]:
         """
         Transcribes all chunks and merges segments/words applying accurate millisecond time offsets.
+        Maintains contextual continuity across chunks using prompt chaining.
         """
         merged_segments: List[Dict[str, Any]] = []
         merged_words: List[Dict[str, Any]] = []
         full_text_parts: List[str] = []
         detected_language = language or "es"
         total_duration = 0.0
+        previous_text_tail = ""
 
-        for chunk in chunks:
+        for idx, chunk in enumerate(chunks):
             chunk_path = chunk["chunk_path"]
             offset = chunk["start_offset"]
-            logger.info(f"Transcribiendo chunk {chunk.get('chunk_index', 0)} (offset={offset:.2f}s)...")
+            logger.info(f"Transcribiendo chunk {idx + 1}/{len(chunks)} (offset={offset:.2f}s)...")
 
-            resp = self.transcribe_chunk(chunk_path, language=language, prompt=prompt)
+            # Context chaining: inject tail of previous chunk into prompt for seamless transitions
+            chunk_prompt = prompt or ""
+            if previous_text_tail:
+                chunk_prompt = f"{previous_text_tail} {chunk_prompt}".strip()
+
+            resp = self.transcribe_chunk(chunk_path, language=language, prompt=chunk_prompt)
 
             if "language" in resp and not language:
                 detected_language = resp["language"]
@@ -96,8 +129,10 @@ class TranscriptionService:
             chunk_duration = float(resp.get("duration", chunk.get("duration", 0.0)))
             total_duration = max(total_duration, offset + chunk_duration)
 
-            if "text" in resp and resp["text"]:
-                full_text_parts.append(resp["text"].strip())
+            chunk_text = resp.get("text", "").strip()
+            if chunk_text:
+                full_text_parts.append(chunk_text)
+                previous_text_tail = chunk_text[-180:]
 
             # Adjust segment timestamps
             raw_segments = resp.get("segments", [])

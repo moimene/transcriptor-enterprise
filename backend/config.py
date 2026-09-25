@@ -43,13 +43,17 @@ class Settings(BaseSettings):
     R2_REGION: str = "auto"
     PRESIGNED_EXPIRATION_SECONDS: int = 1800  # 30 mins
 
+    # Security & Persistence
+    INTERNAL_API_KEY: str = ""
+    JOB_TTL_HOURS: int = 24
+    OPENAI_TIMEOUT_SECONDS: float = 120.0
+    FFMPEG_TIMEOUT_SECONDS: int = 600
+
     # CORS
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",
         "http://localhost:3001",
-        "https://*.vercel.app",
-        "https://*.railway.app",
-        "*"
+        "https://transcriptor-portal.vercel.app"
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")

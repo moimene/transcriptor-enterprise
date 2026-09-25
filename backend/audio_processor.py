@@ -34,7 +34,14 @@ class AudioProcessor:
         ]
 
         try:
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            res = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=settings.FFMPEG_TIMEOUT_SECONDS
+            )
             data = json.loads(res.stdout)
             format_info = data.get("format", {})
             duration = float(format_info.get("duration", 0.0))
@@ -49,10 +56,14 @@ class AudioProcessor:
                 "has_video": has_video,
                 "format_name": format_info.get("format_name", "unknown")
             }
+        except subprocess.TimeoutExpired:
+            raise AudioProcessorError(f"ffprobe excedió el tiempo límite ({settings.FFMPEG_TIMEOUT_SECONDS}s)")
         except subprocess.CalledProcessError as e:
-            raise AudioProcessorError(f"ffprobe falló al analizar el archivo: {e.stderr}")
+            logger.error(f"ffprobe error: {e.stderr}")
+            raise AudioProcessorError("Error al analizar el archivo multimedia")
         except Exception as e:
-            raise AudioProcessorError(f"Error procesando información de medios: {str(e)}")
+            logger.error(f"Error procesando información de medios: {e}")
+            raise AudioProcessorError("Error al leer la información del archivo")
 
     def extract_and_compress(self, input_path: str, output_path: str) -> Dict[str, Any]:
         """
@@ -75,7 +86,13 @@ class AudioProcessor:
         ]
 
         try:
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                timeout=settings.FFMPEG_TIMEOUT_SECONDS
+            )
             if not os.path.exists(output_path):
                 raise AudioProcessorError("FFmpeg terminó pero el archivo de salida no fue creado.")
 
@@ -88,8 +105,11 @@ class AudioProcessor:
                 "size_mb": round(output_size / (1024 * 1024), 2),
                 "duration": probe["duration"]
             }
+        except subprocess.TimeoutExpired:
+            raise AudioProcessorError(f"La conversión de audio excedió el tiempo límite ({settings.FFMPEG_TIMEOUT_SECONDS}s)")
         except subprocess.CalledProcessError as e:
-            raise AudioProcessorError(f"FFmpeg falló al comprimir el audio: {e.stderr.decode('utf-8', errors='ignore')}")
+            logger.error(f"FFmpeg error: {e.stderr.decode('utf-8', errors='ignore')}")
+            raise AudioProcessorError("Error al procesar y comprimir el audio del archivo")
 
     def find_silence_cut_points(
         self,
@@ -111,7 +131,13 @@ class AudioProcessor:
 
         silences: List[Dict[str, float]] = []
         try:
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            res = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=settings.FFMPEG_TIMEOUT_SECONDS
+            )
             stderr = res.stderr
 
             silence_starts = [float(m) for m in re.findall(r"silence_start: ([\d\.]+)", stderr)]
@@ -119,6 +145,8 @@ class AudioProcessor:
 
             for s, e in zip(silence_starts, silence_ends):
                 silences.append({"start": s, "end": e, "mid": (s + e) / 2.0})
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Silence detection timed out ({settings.FFMPEG_TIMEOUT_SECONDS}s), falling back to clean intervals")
         except Exception as e:
             logger.warning(f"Silence detection warning, falling back to clean intervals: {e}")
 
@@ -164,10 +192,19 @@ class AudioProcessor:
             output_path
         ]
         try:
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                timeout=settings.FFMPEG_TIMEOUT_SECONDS
+            )
             return output_path
+        except subprocess.TimeoutExpired:
+            raise AudioProcessorError(f"Corte de fragmento excedió el tiempo límite ({settings.FFMPEG_TIMEOUT_SECONDS}s)")
         except subprocess.CalledProcessError as e:
-            raise AudioProcessorError(f"Error cortando fragmento de audio: {e.stderr.decode('utf-8', errors='ignore')}")
+            logger.error(f"FFmpeg slice error: {e.stderr.decode('utf-8', errors='ignore')}")
+            raise AudioProcessorError("Error al segmentar el archivo de audio")
 
     def prepare_audio_for_transcription(self, input_path: str, work_dir: str) -> List[Dict[str, Any]]:
         """

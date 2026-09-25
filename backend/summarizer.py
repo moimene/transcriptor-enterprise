@@ -36,7 +36,11 @@ class SummarizerService:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.OPENAI_API_KEY
         if self.api_key:
-            self.client = OpenAI(api_key=self.api_key)
+            self.client = OpenAI(
+                api_key=self.api_key,
+                timeout=settings.OPENAI_TIMEOUT_SECONDS,
+                max_retries=3
+            )
         else:
             self.client = None
 
@@ -78,8 +82,9 @@ class SummarizerService:
             logger.error(f"Error generando resumen con OpenAI: {str(e)}")
             return {
                 "title": "Resumen no disponible",
-                "summary": f"No se pudo generar el resumen automático debido a un error: {str(e)}",
+                "summary": "No se pudo generar el resumen ejecutivo de la sesión en este momento. La transcripción completa y los subtítulos permanecen disponibles.",
                 "key_points": [],
                 "action_items": [],
-                "decisions": []
+                "decisions": [],
+                "error": True
             }

@@ -404,9 +404,10 @@ export function TranscriptionStudio({ data, audioFileUrl, onReset }: Transcripti
                       <textarea
                         value={seg.text}
                         onChange={(e) => {
-                          const updated = [...segments];
-                          updated[seg.id].text = e.target.value;
-                          setSegments(updated);
+                          const val = e.target.value;
+                          setSegments((prev) =>
+                            prev.map((s) => (s.id === seg.id ? { ...s, text: val } : s))
+                          );
                         }}
                         rows={2}
                         className="w-full text-sm p-1.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
@@ -456,9 +457,10 @@ export function TranscriptionStudio({ data, audioFileUrl, onReset }: Transcripti
                   type="text"
                   value={seg.text}
                   onChange={(e) => {
-                    const updated = [...segments];
-                    updated[idx].text = e.target.value;
-                    setSegments(updated);
+                    const val = e.target.value;
+                    setSegments((prev) =>
+                      prev.map((s) => (s.id === seg.id ? { ...s, text: val } : s))
+                    );
                   }}
                   className="w-full p-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-md text-zinc-900 dark:text-zinc-100"
                 />

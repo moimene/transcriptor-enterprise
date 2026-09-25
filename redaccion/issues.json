@@ -1,0 +1,367 @@
+{
+  "issues": [
+    {
+      "id": "MOI-221",
+      "uuid": "272ea999-2e28-4102-b575-8f132135b36f",
+      "title": "S1 \u00b7 Evitar la p\u00e9rdida de transcripciones guardando los trabajos en base de datos persistente con borrado autom\u00e1tico",
+      "description": "## Para entenderlo sin ser t\u00e9cnico\n\n**Qu\u00e9 problema hay.** Actualmente el motor del servidor almacena el estado de los trabajos de transcripci\u00f3n y sus resultados \u00fanicamente en la memoria viva del programa. Si el servidor se reinicia para actualizarse, sufre un corte temporal o falla por falta de recursos, todas las transcripciones en curso o reci\u00e9n finalizadas se borran de inmediato sin posibilidad de recuperaci\u00f3n, provocando que la consulta del usuario devuelva un error de no encontrado. Adem\u00e1s, las transcripciones completadas permanecen indefinidamente en esa memoria mientras el proceso est\u00e9 encendido sin ninguna regla de caducidad, lo que incumple el compromiso de no retenci\u00f3n de datos confidenciales.\n\n**A qui\u00e9n afecta y qu\u00e9 pasa si no se hace.** Afecta a cualquier usuario que est\u00e9 procesando grabaciones de reuniones o entrevistas. Si el servidor sufre cualquier reinicio o actualizaci\u00f3n mientras se procesa un audio largo, la tarea se pierde por completo tras haber consumido tiempo y recursos, obligando al usuario a empezar de cero. Asimismo, la acumulaci\u00f3n descontrolada de textos en memoria puede provocar la ca\u00edda por saturaci\u00f3n del servidor.\n\n**Qu\u00e9 resultado buscamos.** Que cada trabajo de transcripci\u00f3n y su resultado se guarden en una base de datos persistente en disco desde el instante de su creaci\u00f3n. Los trabajos sobreviven a reinicios del servidor y disponen de un mecanismo de borrado programado que elimina de manera definitiva los datos y archivos temporales transcurridas 24 horas (o el plazo que configure la organizaci\u00f3n), garantizando la continuidad del servicio y la privacidad documental.\n\n**C\u00f3mo sabremos que est\u00e1 resuelto.** Podremos iniciar una transcripci\u00f3n, reiniciar deliberadamente el motor del servidor en Railway, y comprobar que al volver a encenderse el estado del trabajo y su resultado siguen disponibles en la consulta del sistema. Asimismo, comprobaremos que una tarea cuya antig\u00fcedad supere el plazo de retenci\u00f3n se borra autom\u00e1ticamente junto con sus archivos asociados.\n\n**Qu\u00e9 te toca a ti.** Nada en la parte t\u00e9cnica; \u00fanicamente confirmar si el plazo de borrado autom\u00e1tico de 24 horas para las transcripciones temporales resulta adecuado para las necesidades de los equipos internos o si prefieres ampliarlo o reducirlo.\n\n## Contexto t\u00e9cnico verificado (2026-09-25)\n\n* El diccionario en memoria `JOBS: Dict[str, Dict[str, Any]] = {}` en `backend/main.py:45` es la \u00fanica fuente de estado de los trabajos.\n* No existe persistencia tras ca\u00eddas o reinicios (`railway.json` tiene pol\u00edtica de reinicio `ON_FAILURE`).\n* Las l\u00edneas `main.py:170` y `main.py:259-268` guardan la transcripci\u00f3n completa en memoria sin l\u00edmite de tiempo ni desalojo.\n* El repositorio est\u00e1 en la rama `main`, commit `bd54196`.\n\n## Qu\u00e9 hay que hacer\n\n1. (Codex) Dise\u00f1ar e implementar el m\u00f3dulo `backend/database.py` con SQLite persistente y esquema de tabla para trabajos (`jobs`): identificador, estado, etapa actual, porcentaje de progreso, resultado de transcripci\u00f3n estructurado, marcas de tiempo de creaci\u00f3n y actualizaci\u00f3n, y mensaje de error en caso de fallo.\n2. (Codex) Sustituir el acceso a `JOBS` en `backend/main.py` por las operaciones de lectura y actualizaci\u00f3n en base de datos.\n3. (Codex) Implementar un proceso de limpieza peri\u00f3dica de trabajos expirados que elimine registros con antig\u00fcedad superior al l\u00edmite configurado (`JOB_TTL_HOURS`) y borre cualquier archivo residual asociado en disco o almacenamiento intermedio.\n4. (Codex) A\u00f1adir pruebas autom\u00e1ticas con `pytest` que verifiquen la persistencia de un trabajo tras reinicializar la conexi\u00f3n y el borrado de tareas caducadas.\n\n## Criterios de hecho\n\n* Nivel exigido: probado y publicado.\n* Un trabajo registrado persiste en SQLite y es recuperable tras reiniciar la instancia de FastAPI.\n* El endpoint `/api/jobs/{id}` consulta el registro en SQLite y devuelve el estado fiel y las marcas de tiempo.\n* Las tareas expiradas son eliminadas de la base de datos por el mecanismo de limpieza.\n\n## Puerta humana\n\nNinguna acci\u00f3n bloqueante. Mois\u00e9s puede ajustar la variable de entorno `JOB_TTL_HOURS` si desea modificar el per\u00edodo por defecto de 24 horas.\n\n## Dependencias\n\nBloquea <issue id=\"05598a52-a81e-451b-8202-864324f65b92\" href=\"https://linear.app/moimene/issue/MOI-224/s4-mostrar-el-avance-real-del-trabajo-en-la-pantalla-y-conservar-las\">MOI-224</issue> y <issue id=\"8185e195-a33f-4fdf-8615-c8296c5f2e20\" href=\"https://linear.app/moimene/issue/MOI-225/s5-comprobar-de-extremo-a-extremo-que-el-servicio-procesa-audios\">MOI-225</issue>.\n\n## Referencias\n\n* Protocolo de ejecuci\u00f3n: `redaccion/proyecto.md`\n* Clave de plan: `plan:transcriptor:s1-persistencia-jobs`",
+      "projectMilestone": {
+        "id": "9003bc5c-2d37-4522-a5c0-a05430975aec",
+        "name": "M1 \u00b7 Persistencia, resiliencia y seguridad en el motor"
+      },
+      "priority": {
+        "value": 1,
+        "name": "Urgent"
+      },
+      "url": "https://linear.app/moimene/issue/MOI-221/s1-evitar-la-perdida-de-transcripciones-guardando-los-trabajos-en-base",
+      "gitBranchName": "moisesmenendez/moi-221-s1-evitar-la-perdida-de-transcripciones-guardando-los",
+      "createdAt": "2026-09-25T03:44:56.534Z",
+      "updatedAt": "2026-09-25T03:49:20.458Z",
+      "archivedAt": null,
+      "completedAt": null,
+      "startedAt": "2026-09-25T03:44:56.603Z",
+      "canceledAt": null,
+      "dueDate": null,
+      "slaStartedAt": null,
+      "slaMediumRiskAt": null,
+      "slaHighRiskAt": null,
+      "slaBreachesAt": null,
+      "status": "In Progress",
+      "statusType": "started",
+      "labels": [
+        "TX \u00b7 Persistencia",
+        "TX \u00b7 Gobierno"
+      ],
+      "attachments": [],
+      "documents": [],
+      "stateHistory": [
+        {
+          "state": {
+            "id": "7c05bbf6-e051-4280-8077-5b483b931540",
+            "name": "In Progress",
+            "type": "started"
+          },
+          "startedAt": "2026-09-25T03:44:56.534Z",
+          "endedAt": null
+        }
+      ],
+      "createdBy": "Moises Menendez",
+      "createdById": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "assignee": "Moises Menendez",
+      "assigneeId": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "delegate": "Codex",
+      "delegateId": "a9705a27-0489-48e9-ad82-e352af7606ce",
+      "project": "Transcriptor Enterprise",
+      "projectId": "900bafd3-9b8f-41ed-b39f-bec2f1fffb63",
+      "team": "Moimene",
+      "teamId": "a06c00cd-fc36-4d34-80de-5a2381a08f0e",
+      "relations": {
+        "blocks": [
+          {
+            "id": "MOI-225",
+            "title": "S5 \u00b7 Comprobar de extremo a extremo que el servicio procesa audios reales y responde con normalidad en producci\u00f3n"
+          },
+          {
+            "id": "MOI-224",
+            "title": "S4 \u00b7 Mostrar el avance real del trabajo en la pantalla y conservar las transcripciones en el navegador ante recargas"
+          }
+        ],
+        "blockedBy": [],
+        "relatedTo": [],
+        "duplicateOf": null
+      }
+    },
+    {
+      "id": "MOI-222",
+      "uuid": "8d730ee3-4d81-4006-99d3-0620ff39629d",
+      "title": "S2 \u00b7 Proteger el servicio cerrando el acceso p\u00fablico sin clave y restringiendo los dominios y ficheros autorizados",
+      "description": "## Para entenderlo sin ser t\u00e9cnico\n\n**Qu\u00e9 problema hay.** La interfaz de programaci\u00f3n del motor del servidor carece actualmente de cualquier mecanismo de autenticaci\u00f3n o clave secreta en sus rutas de transcripci\u00f3n y subida. Cualquier persona u ordenador que conozca la direcci\u00f3n p\u00fablica de Railway puede enviar archivos pesados, generar enlaces de subida al almacenamiento y consumir el saldo de transcripci\u00f3n de la organizaci\u00f3n sin restricci\u00f3n. Adem\u00e1s, la ruta que procesa archivos desde el almac\u00e9n acepta cualquier nombre de archivo sin validar su carpeta, la configuraci\u00f3n de acceso entre p\u00e1ginas web permite peticiones de or\u00edgenes no controlados y los mensajes de error t\u00e9cnicos muestran rutas internas del servidor y textos del sistema operativo al cliente.\n\n**A qui\u00e9n afecta y qu\u00e9 pasa si no se hace.** Afecta a la seguridad corporativa, al presupuesto del proyecto y a la privacidad de los archivos. Si no se protege, un atacante o un esc\u00e1ner automatizado puede agotar el saldo de transcripci\u00f3n, saturar el procesador del servidor con archivos basura o acceder indebidamente a objetos almacenados.\n\n**Qu\u00e9 resultado buscamos.** Un motor protegido que exija una clave de acceso corporativa en cada petici\u00f3n mediante cabecera de seguridad. Solo las peticiones procedentes de nuestra interfaz web autorizada o con la clave correcta son atendidas. Se valida estrictamente que los archivos pertenezcan \u00fanicamente a la carpeta de subidas permitida, se restringe el acceso entre dominios \u00fanicamente a la aplicaci\u00f3n web oficial, se limita el tama\u00f1o m\u00e1ximo de los archivos subidos y se limpian los mensajes de error para no revelar detalles internos del servidor.\n\n**C\u00f3mo sabremos que est\u00e1 resuelto.** Comprobaremos que cualquier petici\u00f3n sin la clave de acceso o con una clave incorrecta es rechazada de inmediato con c\u00f3digo de no autorizado (401), mientras que las peticiones con la clave correcta se atienden con normalidad. Asimismo, verificaremos que los intentos de acceder a archivos fuera de la ruta autorizada son bloqueados y que los errores devuelven un mensaje comprensible y seguro sin trazas del sistema.\n\n**Qu\u00e9 te toca a ti.** Proporcionar o validar el valor de la clave de acceso que desees establecer para proteger el servicio corporativo entre la interfaz web y el motor del servidor.\n\n## Contexto t\u00e9cnico verificado (2026-09-25)\n\n* Endpoints en `backend/main.py` (`/api/upload/presign`, `/api/transcribe/file`, `/api/transcribe/from-storage`, `/api/jobs/{id}`) no tienen dependencias de seguridad ni validaci\u00f3n de cabecera `X-API-Key` o `Authorization`.\n* `backend/main.py:53-58, 246`: `from-storage` acepta `object_key` sin comprobar prefijo `uploads/` ni verificar intentos de navegaci\u00f3n de directorios (`..`).\n* `backend/main.py:30-36`: CORS incluye comodines amplios y or\u00edgenes inseguros.\n* `backend/main.py:221`: Uso de `tempfile.mktemp()` susceptible a condici\u00f3n de carrera.\n* Errores en `main.py:102, 177, 240` exponen `detail=str(e)` con informaci\u00f3n del sistema y rutas de disco.\n\n## Qu\u00e9 hay que hacer\n\n1. (Codex) Implementar un middleware o dependencia de seguridad en FastAPI (`get_api_key`) que verifique la cabecera `X-API-Key` o `Authorization: Bearer <token>` contra la variable de entorno `INTERNAL_API_KEY`. Permitir omisi\u00f3n selectiva \u00fanicamente en la ruta p\u00fablica de comprobaci\u00f3n de salud (`/health`).\n2. (Codex) Validar que `object_key` en `/api/transcribe/from-storage` comience estrictamente por `uploads/` y no contenga secuencias de escape como `..` o barras inversas.\n3. (Codex) Configurar CORS restrictivo en `backend/config.py` y `backend/main.py` limitando los or\u00edgenes a los dominios corporativos autorizados de Vercel y localhost de desarrollo.\n4. (Codex) Sustituir `tempfile.mktemp()` por `tempfile.mkstemp()` y asegurar el cierre y borrado del descriptor de archivo.\n5. (Codex) Sanitizar las respuestas de error en los bloques de captura para no filtrar trazas ni rutas absolutas del servidor al exterior.\n\n## Criterios de hecho\n\n* Nivel exigido: probado y publicado.\n* Peticiones sin clave de acceso a `/api/transcribe/*` devuelven HTTP 401.\n* Peticiones con clave v\u00e1lida se ejecutan correctamente.\n* Intentos de invocar `from-storage` con `object_key` fuera de `uploads/` devuelven HTTP 400.\n* `tempfile.mkstemp()` implementado en el flujo de descarga temporal.\n\n## Puerta humana\n\nMois\u00e9s define o autoriza el valor de `INTERNAL_API_KEY` para los entornos de Railway y Vercel.\n\n## Dependencias\n\nBloquea <issue id=\"05598a52-a81e-451b-8202-864324f65b92\" href=\"https://linear.app/moimene/issue/MOI-224/s4-mostrar-el-avance-real-del-trabajo-en-la-pantalla-y-conservar-las\">MOI-224</issue> y <issue id=\"8185e195-a33f-4fdf-8615-c8296c5f2e20\" href=\"https://linear.app/moimene/issue/MOI-225/s5-comprobar-de-extremo-a-extremo-que-el-servicio-procesa-audios\">MOI-225</issue>.\n\n## Referencias\n\n* Protocolo de ejecuci\u00f3n: `redaccion/proyecto.md`\n* Clave de plan: `plan:transcriptor:s2-seguridad-api`",
+      "projectMilestone": {
+        "id": "9003bc5c-2d37-4522-a5c0-a05430975aec",
+        "name": "M1 \u00b7 Persistencia, resiliencia y seguridad en el motor"
+      },
+      "priority": {
+        "value": 1,
+        "name": "Urgent"
+      },
+      "url": "https://linear.app/moimene/issue/MOI-222/s2-proteger-el-servicio-cerrando-el-acceso-publico-sin-clave-y",
+      "gitBranchName": "moisesmenendez/moi-222-s2-proteger-el-servicio-cerrando-el-acceso-publico-sin-clave",
+      "createdAt": "2026-09-25T03:45:04.428Z",
+      "updatedAt": "2026-09-25T03:49:26.528Z",
+      "archivedAt": null,
+      "completedAt": null,
+      "startedAt": "2026-09-25T03:45:04.486Z",
+      "canceledAt": null,
+      "dueDate": null,
+      "slaStartedAt": null,
+      "slaMediumRiskAt": null,
+      "slaHighRiskAt": null,
+      "slaBreachesAt": null,
+      "status": "In Progress",
+      "statusType": "started",
+      "labels": [
+        "TX \u00b7 Seguridad",
+        "TX \u00b7 Gobierno"
+      ],
+      "attachments": [],
+      "documents": [],
+      "stateHistory": [
+        {
+          "state": {
+            "id": "7c05bbf6-e051-4280-8077-5b483b931540",
+            "name": "In Progress",
+            "type": "started"
+          },
+          "startedAt": "2026-09-25T03:45:04.428Z",
+          "endedAt": null
+        }
+      ],
+      "createdBy": "Moises Menendez",
+      "createdById": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "assignee": "Moises Menendez",
+      "assigneeId": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "delegate": "Codex",
+      "delegateId": "a9705a27-0489-48e9-ad82-e352af7606ce",
+      "project": "Transcriptor Enterprise",
+      "projectId": "900bafd3-9b8f-41ed-b39f-bec2f1fffb63",
+      "team": "Moimene",
+      "teamId": "a06c00cd-fc36-4d34-80de-5a2381a08f0e",
+      "relations": {
+        "blocks": [
+          {
+            "id": "MOI-225",
+            "title": "S5 \u00b7 Comprobar de extremo a extremo que el servicio procesa audios reales y responde con normalidad en producci\u00f3n"
+          },
+          {
+            "id": "MOI-224",
+            "title": "S4 \u00b7 Mostrar el avance real del trabajo en la pantalla y conservar las transcripciones en el navegador ante recargas"
+          }
+        ],
+        "blockedBy": [],
+        "relatedTo": [],
+        "duplicateOf": null
+      }
+    },
+    {
+      "id": "MOI-223",
+      "uuid": "62257801-087d-4b33-a659-67f7dece60a7",
+      "title": "S3 \u00b7 Evitar el colapso del servidor procesando el audio en segundo plano y a\u00f1adiendo l\u00edmites de tiempo y reintentos",
+      "description": "## Para entenderlo sin ser t\u00e9cnico\n\n**Qu\u00e9 problema hay.** El proceso principal del motor del servidor ejecuta las tareas pesadas de conversi\u00f3n de audio y las peticiones a la inteligencia artificial de forma s\u00edncrona dentro del bucle de gesti\u00f3n de conexiones. Esto provoca que, mientras se est\u00e1 procesando un archivo de audio, el servidor se congele por completo para todos los dem\u00e1s usuarios: nadie m\u00e1s puede consultar el estado de sus trabajos ni la comprobaci\u00f3n de salud responde hasta que la transcripci\u00f3n en curso termine. Adem\u00e1s, las herramientas de corte y conversi\u00f3n de audio carecen de l\u00edmite de tiempo, de modo que un archivo con formato corrupto puede dejar el servidor colgado para siempre. Asimismo, las llamadas al proveedor de inteligencia artificial carecen de reintentos autom\u00e1ticos ante cortes puntuales de red o saturaci\u00f3n temporal.\n\n**A qui\u00e9n afecta y qu\u00e9 pasa si no se hace.** Afecta a todos los miembros del equipo que utilicen la herramienta a la vez. Si un usuario sube una grabaci\u00f3n larga, el resto de usuarios experimentar\u00e1 que la aplicaci\u00f3n no responde o se queda bloqueada. Si adem\u00e1s ocurre un microcorte de conexi\u00f3n con el proveedor o un fallo en un fragmento de sonido, la transcripci\u00f3n completa se cancela sin reintentar, perdiendo todo el avance anterior.\n\n**Qu\u00e9 resultado buscamos.** Un motor de servidor \u00e1gil y resiliente: las tareas pesadas de audio e inteligencia artificial se delegan a un grupo de ejecuci\u00f3n en segundo plano sin congelar el bucle principal de conexiones; todas las conversiones de sonido cuentan con un l\u00edmite de tiempo estricto para evitar bloqueos por archivos da\u00f1ados; y las peticiones a la inteligencia artificial incorporan reintentos autom\u00e1ticos y tiempos de espera controlados ante incidencias transitorias.\n\n**C\u00f3mo sabremos que est\u00e1 resuelto.** Podremos iniciar el procesamiento de un archivo de audio de varios minutos y comprobar que, mientras se procesa, el servidor contin\u00faa respondiendo de forma instant\u00e1nea a las comprobaciones de salud y a las consultas de otros usuarios. Comprobaremos tambi\u00e9n que la simulaci\u00f3n de un fallo transitorio de red no interrumpe el trabajo sino que se recupera autom\u00e1ticamente gracias a los reintentos.\n\n**Qu\u00e9 te toca a ti.** Nada en este momento; las mejoras de concurrencia y l\u00edmites de tiempo son ajustes t\u00e9cnicos ordinarios que aplica quien ejecuta.\n\n## Contexto t\u00e9cnico verificado (2026-09-25)\n\n* `backend/main.py:185`: `transcribe_uploaded_file` es `async def` pero invoca s\u00edncronamente `run_pipeline`, bloqueando el bucle de eventos de uvicorn y deteniendo respuestas a `/health` y `/api/jobs/*`.\n* `backend/audio_processor.py:37, 78, 114, 167`: Subprocesos `subprocess.run` sin par\u00e1metro `timeout`.\n* `backend/transcriber.py:41` y `backend/summarizer.py:39`: Clientes OpenAI inicializados sin timeout expl\u00edcito ni control de reintentos con retroceso exponencial.\n* `backend/summarizer.py:77-84`: Atrapa cualquier excepci\u00f3n y devuelve estado 200 con mensaje de error interno incrustado en el campo de resumen.\n\n## Qu\u00e9 hay que hacer\n\n1. (Codex) Configurar la ejecuci\u00f3n de `run_pipeline` en un hilo de trabajo separado del bucle principal mediante `run_in_threadpool` de FastAPI o definiendo la ruta como funci\u00f3n s\u00edncrona `def` para que el framework la delegue autom\u00e1ticamente al grupo de hilos.\n2. (Codex) A\u00f1adir `timeout=600` (10 minutos) a todas las llamadas `subprocess.run` de `audio_processor.py`, capturando `subprocess.TimeoutExpired` con registro informativo y liberaci\u00f3n de archivos temporales.\n3. (Codex) Configurar el cliente de OpenAI con tiempo de espera expl\u00edcito (`timeout=120.0`) y l\u00f3gica de reintento para errores recuperables de red (`APIConnectionError`) y l\u00edmites de peticiones (`RateLimitError`).\n4. (Codex) Mejorar el generador de res\u00famenes (`summarizer.py`) para que devuelva un estado diferenciado cuando no se pueda generar la minuta sin simular un falso \u00e9xito ni filtrar excepciones crudas al usuario.\n\n## Criterios de hecho\n\n* Nivel exigido: probado y publicado.\n* El endpoint `/health` responde con latencia inferior a 50 ms durante la ejecuci\u00f3n de una transcripci\u00f3n activa.\n* Subprocesos de FFmpeg abortan limpiamente si exceden el l\u00edmite de tiempo sin dejar procesos hu\u00e9rfanos.\n* Las llamadas a OpenAI toleran desconexiones ef\u00edmeras mediante reintento controlado.\n\n## Puerta humana\n\nNinguna.\n\n## Dependencias\n\nBloquea <issue id=\"8185e195-a33f-4fdf-8615-c8296c5f2e20\" href=\"https://linear.app/moimene/issue/MOI-225/s5-comprobar-de-extremo-a-extremo-que-el-servicio-procesa-audios\">MOI-225</issue>.\n\n## Referencias\n\n* Protocolo de ejecuci\u00f3n: `redaccion/proyecto.md`\n* Clave de plan: `plan:transcriptor:s3-resiliencia-backend`",
+      "projectMilestone": {
+        "id": "9003bc5c-2d37-4522-a5c0-a05430975aec",
+        "name": "M1 \u00b7 Persistencia, resiliencia y seguridad en el motor"
+      },
+      "priority": {
+        "value": 1,
+        "name": "Urgent"
+      },
+      "url": "https://linear.app/moimene/issue/MOI-223/s3-evitar-el-colapso-del-servidor-procesando-el-audio-en-segundo-plano",
+      "gitBranchName": "moisesmenendez/moi-223-s3-evitar-el-colapso-del-servidor-procesando-el-audio-en",
+      "createdAt": "2026-09-25T03:45:18.614Z",
+      "updatedAt": "2026-09-25T03:49:32.419Z",
+      "archivedAt": null,
+      "completedAt": null,
+      "startedAt": "2026-09-25T03:45:19.029Z",
+      "canceledAt": null,
+      "dueDate": null,
+      "slaStartedAt": null,
+      "slaMediumRiskAt": null,
+      "slaHighRiskAt": null,
+      "slaBreachesAt": null,
+      "status": "In Progress",
+      "statusType": "started",
+      "labels": [
+        "TX \u00b7 Resiliencia",
+        "TX \u00b7 Gobierno"
+      ],
+      "attachments": [],
+      "documents": [],
+      "stateHistory": [
+        {
+          "state": {
+            "id": "7c05bbf6-e051-4280-8077-5b483b931540",
+            "name": "In Progress",
+            "type": "started"
+          },
+          "startedAt": "2026-09-25T03:45:18.614Z",
+          "endedAt": null
+        }
+      ],
+      "createdBy": "Moises Menendez",
+      "createdById": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "assignee": "Moises Menendez",
+      "assigneeId": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "delegate": "Codex",
+      "delegateId": "a9705a27-0489-48e9-ad82-e352af7606ce",
+      "project": "Transcriptor Enterprise",
+      "projectId": "900bafd3-9b8f-41ed-b39f-bec2f1fffb63",
+      "team": "Moimene",
+      "teamId": "a06c00cd-fc36-4d34-80de-5a2381a08f0e",
+      "relations": {
+        "blocks": [
+          {
+            "id": "MOI-225",
+            "title": "S5 \u00b7 Comprobar de extremo a extremo que el servicio procesa audios reales y responde con normalidad en producci\u00f3n"
+          }
+        ],
+        "blockedBy": [],
+        "relatedTo": [],
+        "duplicateOf": null
+      }
+    },
+    {
+      "id": "MOI-224",
+      "uuid": "05598a52-a81e-451b-8202-864324f65b92",
+      "title": "S4 \u00b7 Mostrar el avance real del trabajo en la pantalla y conservar las transcripciones en el navegador ante recargas",
+      "description": "## Para entenderlo sin ser t\u00e9cnico\n\n**Qu\u00e9 problema hay.** En la pantalla de la aplicaci\u00f3n web, la barra de progreso que indica los pasos de compresi\u00f3n, transcripci\u00f3n y resumen no refleja lo que realmente est\u00e1 ocurriendo en el servidor sino que avanza mediante un temporizador visual ficticio (`frontend/app/page.tsx:69-92`). Si la transcripci\u00f3n tarda m\u00e1s de lo previsto, la barra puede quedarse congelada en el 95% durante decenas de minutos sin que el usuario sepa si el trabajo sigue vivo. Adem\u00e1s, los resultados de la transcripci\u00f3n y las correcciones que hace el usuario solo se guardan en la memoria temporal de la pesta\u00f1a (`TranscriptionStudio.tsx:38`): si el usuario recarga la p\u00e1gina por error o cierra el navegador, todo el trabajo se pierde por completo. Asimismo, los errores de validaci\u00f3n t\u00e9cnica se muestran al usuario como mensajes confusos de texto en lugar de alertas claras.\n\n**A qui\u00e9n afecta y qu\u00e9 pasa si no se hace.** Afecta directamente a los usuarios finales del equipo. Requiere antes disponer de la persistencia en base de datos de <issue id=\"272ea999-2e28-4102-b575-8f132135b36f\" href=\"https://linear.app/moimene/issue/MOI-221/s1-evitar-la-perdida-de-transcripciones-guardando-los-trabajos-en-base\">MOI-221</issue> y de la protecci\u00f3n por clave de <issue id=\"8d730ee3-4d81-4006-99d3-0620ff39629d\" href=\"https://linear.app/moimene/issue/MOI-222/s2-proteger-el-servicio-cerrando-el-acceso-publico-sin-clave-y\">MOI-222</issue>. La falta de informaci\u00f3n real sobre el progreso genera incertidumbre y sospechas de que la aplicaci\u00f3n se ha colgado, incitando al usuario a refrescar y perder su transcripci\u00f3n. La falta de persistencia en el navegador causa frustraci\u00f3n al tener que repetir transcripciones o correcciones manuales ya realizadas.\n\n**Qu\u00e9 resultado buscamos.** Una interfaz visual fiable y transparente: la barra de progreso se sincroniza con los estados y porcentajes reales del servidor; el resultado de la \u00faltima transcripci\u00f3n y el historial reciente de trabajos se conservan en el almacenamiento local del navegador para resistir recargas involuntarias; y los mensajes de error se traducen a explicaciones comprensibles y amigables.\n\n**C\u00f3mo sabremos que est\u00e1 resuelto.** Comprobaremos que al iniciar una transcripci\u00f3n la barra avanza conforme el servidor cambia de fase t\u00e9cnica de forma comprobable. Verificaremos que tras completarse una transcripci\u00f3n podemos refrescar el navegador por completo y el texto, los subt\u00edtulos y el resumen permanecen accesibles en pantalla. Asimismo, forzaremos un error de formato para confirmar que el aviso en pantalla es legible y no contiene c\u00f3digos crudos del sistema.\n\n**Qu\u00e9 te toca a ti.** Nada en este momento; validar el comportamiento de la interfaz una vez implementadas las mejoras de persistencia y progreso visual.\n\n## Contexto t\u00e9cnico verificado (2026-09-25)\n\n* `frontend/app/page.tsx:69-92`: La simulaci\u00f3n de progreso altera estados antes de la resoluci\u00f3n del fetch \u00fanico.\n* `frontend/app/page.tsx:13-18` y `frontend/components/TranscriptionStudio.tsx:38`: El estado de la transcripci\u00f3n solo reside en `useState` de React, sin almacenamiento en `localStorage` o `sessionStorage`.\n* `frontend/components/TranscriptionStudio.tsx:408, 460`: Manejo de \u00edndices fr\u00e1gil entre pesta\u00f1as de Transcripci\u00f3n y Subt\u00edtulos ante b\u00fasquedas y filtros.\n* `frontend/app/page.tsx:80-81`: Parseo de errores `detail` de FastAPI no contempla listas de validaci\u00f3n provocando textos `[object Object]`.\n\n## Qu\u00e9 hay que hacer\n\n1. (Codex) Conectar el flujo de procesamiento de la interfaz web para consultar peri\u00f3dicamente el estado real del trabajo (`/api/jobs/{id}`) en segundo plano, actualizando el componente `ProgressTracker` con la fase y el porcentaje aut\u00e9nticos calculados por el motor.\n2. (Codex) Implementar un mecanismo de persistencia en `localStorage` del navegador para conservar la transcripci\u00f3n activa y un listado de trabajos recientes, permitiendo reanudar o consultar trabajos anteriores sin reenviar el archivo.\n3. (Codex) Corregir la actualizaci\u00f3n de segmentos en `TranscriptionStudio.tsx` para operar por identificador un\u00edvoco de segmento (`seg.id`) en lugar de \u00edndices posicionales de listas filtradas.\n4. (Codex) Robustecer el formateo de errores en `page.tsx` para serializar adecuadamente los arrays de validaci\u00f3n de FastAPI en mensajes comprensibles.\n5. (Codex) Asegurar la liberaci\u00f3n de recursos multimedia (`URL.revokeObjectURL`) al cambiar de archivo o desmontar los componentes visuales para prevenir consumos excesivos de memoria en el navegador.\n\n## Criterios de hecho\n\n* Nivel exigido: probado y publicado.\n* El usuario puede recargar la p\u00e1gina tras una transcripci\u00f3n y el resultado se restaura autom\u00e1ticamente desde el almacenamiento local.\n* Las fases del componente `ProgressTracker` coinciden con las etapas emitidas por el servidor.\n* La edici\u00f3n de texto en subt\u00edtulos y transcripci\u00f3n preserva la integridad de los segmentos incluso con filtros de b\u00fasqueda activos.\n\n## Puerta humana\n\nNinguna acci\u00f3n bloqueante.\n\n## Dependencias\n\nBloqueado por <issue id=\"272ea999-2e28-4102-b575-8f132135b36f\" href=\"https://linear.app/moimene/issue/MOI-221/s1-evitar-la-perdida-de-transcripciones-guardando-los-trabajos-en-base\">MOI-221</issue> y <issue id=\"8d730ee3-4d81-4006-99d3-0620ff39629d\" href=\"https://linear.app/moimene/issue/MOI-222/s2-proteger-el-servicio-cerrando-el-acceso-publico-sin-clave-y\">MOI-222</issue>.\n\n## Referencias\n\n* Protocolo de ejecuci\u00f3n: `redaccion/proyecto.md`\n* Clave de plan: `plan:transcriptor:s4-frontend-estado-asincrono`",
+      "projectMilestone": {
+        "id": "e9d9a18c-28d2-462e-9989-de7c477bcc84",
+        "name": "M2 \u00b7 Experiencia de usuario, avance real y memoria en pantalla"
+      },
+      "priority": {
+        "value": 2,
+        "name": "High"
+      },
+      "url": "https://linear.app/moimene/issue/MOI-224/s4-mostrar-el-avance-real-del-trabajo-en-la-pantalla-y-conservar-las",
+      "gitBranchName": "moisesmenendez/moi-224-s4-mostrar-el-avance-real-del-trabajo-en-la-pantalla-y",
+      "createdAt": "2026-09-25T03:45:38.165Z",
+      "updatedAt": "2026-09-25T03:45:38.747Z",
+      "archivedAt": null,
+      "completedAt": null,
+      "startedAt": null,
+      "canceledAt": null,
+      "dueDate": null,
+      "slaStartedAt": null,
+      "slaMediumRiskAt": null,
+      "slaHighRiskAt": null,
+      "slaBreachesAt": null,
+      "status": "Todo",
+      "statusType": "unstarted",
+      "labels": [
+        "TX \u00b7 Frontend"
+      ],
+      "attachments": [],
+      "documents": [],
+      "stateHistory": [
+        {
+          "state": {
+            "id": "14a964f9-748c-4bfe-8e61-2c9b5ec95913",
+            "name": "Todo",
+            "type": "unstarted"
+          },
+          "startedAt": "2026-09-25T03:45:38.165Z",
+          "endedAt": null
+        }
+      ],
+      "createdBy": "Moises Menendez",
+      "createdById": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "assignee": "Moises Menendez",
+      "assigneeId": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "delegate": "Codex",
+      "delegateId": "a9705a27-0489-48e9-ad82-e352af7606ce",
+      "project": "Transcriptor Enterprise",
+      "projectId": "900bafd3-9b8f-41ed-b39f-bec2f1fffb63",
+      "team": "Moimene",
+      "teamId": "a06c00cd-fc36-4d34-80de-5a2381a08f0e",
+      "relations": {
+        "blocks": [
+          {
+            "id": "MOI-225",
+            "title": "S5 \u00b7 Comprobar de extremo a extremo que el servicio procesa audios reales y responde con normalidad en producci\u00f3n"
+          }
+        ],
+        "blockedBy": [
+          {
+            "id": "MOI-222",
+            "title": "S2 \u00b7 Proteger el servicio cerrando el acceso p\u00fablico sin clave y restringiendo los dominios y ficheros autorizados"
+          },
+          {
+            "id": "MOI-221",
+            "title": "S1 \u00b7 Evitar la p\u00e9rdida de transcripciones guardando los trabajos en base de datos persistente con borrado autom\u00e1tico"
+          }
+        ],
+        "relatedTo": [],
+        "duplicateOf": null
+      }
+    },
+    {
+      "id": "MOI-225",
+      "uuid": "8185e195-a33f-4fdf-8615-c8296c5f2e20",
+      "title": "S5 \u00b7 Comprobar de extremo a extremo que el servicio procesa audios reales y responde con normalidad en producci\u00f3n",
+      "description": "## Para entenderlo sin ser t\u00e9cnico\n\n**Qu\u00e9 problema hay.** Tras implementar las mejoras de persistencia en base de datos, protecci\u00f3n por clave, ejecuci\u00f3n en segundo plano y persistencia en el navegador, es necesario comprobar de extremo a extremo que todas las piezas encajan perfectamente en los entornos reales de producci\u00f3n de Vercel y Railway. Sin una verificaci\u00f3n completa con archivos multimedia reales y pruebas automatizadas, podr\u00edan existir desajustes inadvertidos entre la interfaz y el servidor o fallos de configuraci\u00f3n de variables secretas en los servidores corporativos.\n\n**A qui\u00e9n afecta y qu\u00e9 pasa si no se hace.** Afecta a toda la organizaci\u00f3n. Requiere haber completado las tareas previas <issue id=\"272ea999-2e28-4102-b575-8f132135b36f\" href=\"https://linear.app/moimene/issue/MOI-221/s1-evitar-la-perdida-de-transcripciones-guardando-los-trabajos-en-base\">MOI-221</issue>, <issue id=\"8d730ee3-4d81-4006-99d3-0620ff39629d\" href=\"https://linear.app/moimene/issue/MOI-222/s2-proteger-el-servicio-cerrando-el-acceso-publico-sin-clave-y\">MOI-222</issue>, <issue id=\"62257801-087d-4b33-a659-67f7dece60a7\" href=\"https://linear.app/moimene/issue/MOI-223/s3-evitar-el-colapso-del-servidor-procesando-el-audio-en-segundo-plano\">MOI-223</issue> y <issue id=\"05598a52-a81e-451b-8202-864324f65b92\" href=\"https://linear.app/moimene/issue/MOI-224/s4-mostrar-el-avance-real-del-trabajo-en-la-pantalla-y-conservar-las\">MOI-224</issue>. Si se entrega una versi\u00f3n sin verificar rigurosamente en producci\u00f3n, los usuarios podr\u00edan encontrarse con bloqueos inesperados, incompatibilidades de formatos de v\u00eddeo o rechazos indebidos de sus grabaciones de trabajo.\n\n**Qu\u00e9 resultado buscamos.** Un servicio corporativo plenamente operativo, verificado y publicado: la aplicaci\u00f3n web en Vercel se comunica de manera fluida y protegida con el motor en Railway; las transcripciones de audios y v\u00eddeos reales se completan con \u00e9xito generando textos precisos, subt\u00edtulos y minutas ejecutivas; y todas las comprobaciones de salud y seguridad responden con normalidad.\n\n**C\u00f3mo sabremos que est\u00e1 resuelto.** Ejecutaremos una bater\u00eda completa de pruebas autom\u00e1ticas en el motor y en la aplicaci\u00f3n web, realizaremos una transcripci\u00f3n real completa de un archivo de prueba en el entorno publicado en internet y acreditaremos mediante un justificante de pruebas que los resultados persisten, que la clave protege el acceso y que la interfaz muestra el avance fielmente.\n\n**Qu\u00e9 te toca a ti.** Revisar el justificante final de pruebas y otorgar la aceptaci\u00f3n formal de la soluci\u00f3n publicada para dar por completada la entrega del servicio corporativo.\n\n## Contexto t\u00e9cnico verificado (2026-09-25)\n\n* Repositorio en GitHub: `moimene/transcriptor-enterprise`.\n* Motor desplegado en Railway: servicio `transcriptor-backend` (`https://transcriptor-backend-production.up.railway.app`).\n* Portal web desplegado en Vercel: proyecto `transcriptor-portal` (`https://transcriptor-portal.vercel.app`).\n* Pruebas previas confirmaron respuesta 200 en `/health` y transcripci\u00f3n funcional inicial.\n\n## Qu\u00e9 hay que hacer\n\n1. (Codex) Ejecutar la suite completa de pruebas unitarias y de integraci\u00f3n del backend con `pytest`, asegurando cobertura de los nuevos m\u00f3dulos de base de datos, seguridad y manejo de subprocesos.\n2. (Codex) Ejecutar la compilaci\u00f3n y validaci\u00f3n est\u00e1tica del frontend con `npm run build` en el directorio de la aplicaci\u00f3n web.\n3. (Codex) Incorporar y publicar las modificaciones en la rama principal (`main`) de GitHub, verificando que Railway y Vercel despliegan las nuevas versiones sin incidencias.\n4. (Codex) Realizar una prueba de verificaci\u00f3n en caliente en producci\u00f3n enviando un archivo de audio real a trav\u00e9s del portal y validando el registro persistente, la autenticaci\u00f3n y la restituci\u00f3n en pantalla.\n5. (Mois\u00e9s) Revisar el resultado y otorgar la aceptaci\u00f3n de la entrega.\n\n## Criterios de hecho\n\n* Nivel exigido: publicado y aceptado.\n* Todas las pruebas de `pytest` y `npm run build` pasan sin errores ni advertencias bloqueantes.\n* Los despliegues autom\u00e1ticos de Railway y Vercel concluyen con estado saludable (200 OK).\n* Una transcripci\u00f3n real en producci\u00f3n genera el texto, subt\u00edtulos y resumen esperados.\n\n## Puerta humana\n\nMois\u00e9s valida el funcionamiento en producci\u00f3n y confirma la aceptaci\u00f3n final.\n\n## Dependencias\n\nBloqueado por <issue id=\"272ea999-2e28-4102-b575-8f132135b36f\" href=\"https://linear.app/moimene/issue/MOI-221/s1-evitar-la-perdida-de-transcripciones-guardando-los-trabajos-en-base\">MOI-221</issue>, <issue id=\"8d730ee3-4d81-4006-99d3-0620ff39629d\" href=\"https://linear.app/moimene/issue/MOI-222/s2-proteger-el-servicio-cerrando-el-acceso-publico-sin-clave-y\">MOI-222</issue>, <issue id=\"62257801-087d-4b33-a659-67f7dece60a7\" href=\"https://linear.app/moimene/issue/MOI-223/s3-evitar-el-colapso-del-servidor-procesando-el-audio-en-segundo-plano\">MOI-223</issue> y <issue id=\"05598a52-a81e-451b-8202-864324f65b92\" href=\"https://linear.app/moimene/issue/MOI-224/s4-mostrar-el-avance-real-del-trabajo-en-la-pantalla-y-conservar-las\">MOI-224</issue>.\n\n## Referencias\n\n* Protocolo de ejecuci\u00f3n: `redaccion/proyecto.md`\n* Clave de plan: `plan:transcriptor:s5-verificacion-produccion`",
+      "projectMilestone": {
+        "id": "dbeac03b-95d2-442f-a63e-7cbae960c6d9",
+        "name": "M3 \u00b7 Verificaci\u00f3n de extremos y publicaci\u00f3n en producci\u00f3n"
+      },
+      "priority": {
+        "value": 2,
+        "name": "High"
+      },
+      "url": "https://linear.app/moimene/issue/MOI-225/s5-comprobar-de-extremo-a-extremo-que-el-servicio-procesa-audios",
+      "gitBranchName": "moisesmenendez/moi-225-s5-comprobar-de-extremo-a-extremo-que-el-servicio-procesa",
+      "createdAt": "2026-09-25T03:45:59.835Z",
+      "updatedAt": "2026-09-25T03:46:00.401Z",
+      "archivedAt": null,
+      "completedAt": null,
+      "startedAt": null,
+      "canceledAt": null,
+      "dueDate": null,
+      "slaStartedAt": null,
+      "slaMediumRiskAt": null,
+      "slaHighRiskAt": null,
+      "slaBreachesAt": null,
+      "status": "Todo",
+      "statusType": "unstarted",
+      "labels": [
+        "TX \u00b7 Decisi\u00f3n",
+        "TX \u00b7 Gobierno"
+      ],
+      "attachments": [],
+      "documents": [],
+      "stateHistory": [
+        {
+          "state": {
+            "id": "14a964f9-748c-4bfe-8e61-2c9b5ec95913",
+            "name": "Todo",
+            "type": "unstarted"
+          },
+          "startedAt": "2026-09-25T03:45:59.835Z",
+          "endedAt": null
+        }
+      ],
+      "createdBy": "Moises Menendez",
+      "createdById": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "assignee": "Moises Menendez",
+      "assigneeId": "edf6a37c-83fb-4640-a736-52b6bb553649",
+      "delegate": "Codex",
+      "delegateId": "a9705a27-0489-48e9-ad82-e352af7606ce",
+      "project": "Transcriptor Enterprise",
+      "projectId": "900bafd3-9b8f-41ed-b39f-bec2f1fffb63",
+      "team": "Moimene",
+      "teamId": "a06c00cd-fc36-4d34-80de-5a2381a08f0e",
+      "relations": {
+        "blocks": [],
+        "blockedBy": [
+          {
+            "id": "MOI-221",
+            "title": "S1 \u00b7 Evitar la p\u00e9rdida de transcripciones guardando los trabajos en base de datos persistente con borrado autom\u00e1tico"
+          },
+          {
+            "id": "MOI-223",
+            "title": "S3 \u00b7 Evitar el colapso del servidor procesando el audio en segundo plano y a\u00f1adiendo l\u00edmites de tiempo y reintentos"
+          },
+          {
+            "id": "MOI-224",
+            "title": "S4 \u00b7 Mostrar el avance real del trabajo en la pantalla y conservar las transcripciones en el navegador ante recargas"
+          },
+          {
+            "id": "MOI-222",
+            "title": "S2 \u00b7 Proteger el servicio cerrando el acceso p\u00fablico sin clave y restringiendo los dominios y ficheros autorizados"
+          }
+        ],
+        "relatedTo": [],
+        "duplicateOf": null
+      }
+    }
+  ]
+}
