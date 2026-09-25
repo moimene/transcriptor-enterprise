@@ -1,0 +1,81 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Transcriptor Enterprise - Workflow de Procesamiento",
+    "output": "docs/architecture/workflow.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "ruta-principal",
+        "label": "Flujo Extremo a Extremo",
+        "focus": ["upload", "extract", "gateway", "fastapi", "ffmpeg", "whisper", "quarantine", "gpt", "studio"],
+        "note": "Recorrido completo desde la ingesta de archivo hasta el estudio interactivo."
+      },
+      {
+        "id": "seguridad-audio",
+        "label": "Optimización y Aislamiento de Seguridad",
+        "focus": ["extract", "gateway", "quarantine", "gpt"],
+        "note": "Extracción en navegador y barrera de cuarentena XML anti-inyección."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "client", "label": "Cliente & Navegador Web" },
+    { "id": "gateway", "label": "Vercel Edge & Seguridad" },
+    { "id": "backend", "label": "Railway Engine & FFmpeg" },
+    { "id": "ai", "label": "Inferencia OpenAI & Resumen" }
+  ],
+  "phases": [
+    { "id": "intake", "label": "Intake & Extracción Local", "fromCol": 0, "toCol": 1 },
+    { "id": "transcoding", "label": "Transcodificación & Whisper", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "synthesis", "label": "Blindaje Adversarial & Entrega", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "extraction_group", "label": "Extracción Web Audio", "lane": "client", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "processing_group", "label": "Procesamiento FFmpeg", "lane": "backend", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "defense_group", "label": "Aislamiento de Seguridad", "lane": "ai", "fromCol": 4, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["upload", "extract", "gateway", "fastapi", "ffmpeg", "whisper", "quarantine", "gpt", "studio"],
+  "nodes": [
+    { "id": "upload", "lane": "client", "col": 0, "type": "external", "label": "Carga Multimedia", "sublabel": "Audio o Vídeo hasta 1GB", "width": 136 },
+    { "id": "extract", "lane": "client", "col": 1, "type": "frontend", "label": "Web Audio Extractor", "sublabel": "WAV 16kHz local", "tag": "90% menos peso", "width": 136 },
+    { "id": "gateway", "lane": "gateway", "col": 1, "type": "cloud", "label": "Vercel Edge Proxy", "sublabel": "Enrutamiento HTTPS", "width": 136 },
+    { "id": "fastapi", "lane": "backend", "col": 2, "type": "backend", "label": "FastAPI Controller", "sublabel": "Jobs SQLite WAL", "width": 136 },
+    { "id": "ffmpeg", "lane": "backend", "col": 3, "type": "backend", "label": "FFmpeg Engine", "sublabel": "32kbps Mono & VAD", "tag": "silencedetect", "width": 136 },
+    { "id": "whisper", "lane": "ai", "col": 3, "type": "cloud", "label": "Whisper-1 ASR", "sublabel": "verbose_json", "width": 136 },
+    { "id": "quarantine", "lane": "ai", "col": 4, "type": "security", "label": "Cuarentena XML", "sublabel": "Anti-Prompt Injection", "tag": "aislamiento", "width": 136 },
+    { "id": "gpt", "lane": "ai", "col": 5, "type": "cloud", "label": "GPT-4o-mini", "sublabel": "4 Plantillas Analíticas", "width": 136 },
+    { "id": "studio", "lane": "client", "col": 5, "type": "frontend", "label": "Transcription Studio", "sublabel": "Player + Subtítulos + MD", "width": 136 }
+  ],
+  "edges": [
+    { "id": "flow-upload-extract", "from": "upload", "to": "extract", "variant": "default" },
+    { "id": "flow-extract-gateway", "from": "extract", "to": "gateway", "label": "WAV ~20MB", "variant": "emphasis" },
+    { "id": "flow-gateway-fastapi", "from": "gateway", "to": "fastapi", "label": "X-API-Key", "variant": "security" },
+    { "id": "flow-fastapi-ffmpeg", "from": "fastapi", "to": "ffmpeg", "label": "Transcodificar", "variant": "emphasis" },
+    { "id": "flow-ffmpeg-whisper", "from": "ffmpeg", "to": "whisper", "label": "Chunks <25MB", "variant": "emphasis" },
+    { "id": "flow-whisper-quarantine", "from": "whisper", "to": "quarantine", "label": "Texto Transcrito", "variant": "default" },
+    { "id": "flow-quarantine-gpt", "from": "quarantine", "to": "gpt", "label": "Prompt Protegido", "variant": "security" },
+    { "id": "flow-gpt-studio", "from": "gpt", "to": "studio", "variant": "emphasis", "role": "return", "fromSide": "right", "toSide": "right", "route": "outside-right", "width": 1.2 }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Optimización Client-Side",
+      "items": [
+        "El navegador decodifica el contenedor de vídeo y extrae únicamente la pista de audio",
+        "Se eluden los límites de carga serverless sin sobrecargar las funciones edge",
+        "Ahorro de hasta el 95% del tiempo de transferencia de red"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Defensa Adversarial en Cuarentena",
+      "items": [
+        "La transcripción se inyecta encapsulada en <TRANSCRIPCION_ORIGINAL>",
+        "Preámbulo estricto desactiva cualquier orden maliciosa oculta en el audio",
+        "Sanitización y autocorrección de JSON aseguran la integridad del informe"
+      ]
+    }
+  ]
+}

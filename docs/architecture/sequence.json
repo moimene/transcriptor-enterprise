@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Transcriptor Enterprise - Secuencia Temporal de Ejecución",
+    "output": "docs/architecture/sequence.html",
+    "viewBox": [960, 930],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "ingesta-y-audio",
+        "label": "Ingesta, Extracción y Transcripción",
+        "focus": ["user", "client", "api", "ffmpeg", "whisper"],
+        "note": "Traza el flujo desde la interacción del usuario hasta los timestamps generados por Whisper."
+      },
+      {
+        "id": "sintesis-y-seguridad",
+        "label": "Aislamiento Adversarial y Entrega",
+        "focus": ["api", "summarizer", "gpt", "db", "client"],
+        "note": "Cuarentena XML, sanitización del JSON del LLM, persistencia SQLite y renderizado final."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "user", "type": "external", "label": "Usuario", "sublabel": "Navegador" },
+    { "id": "client", "type": "frontend", "label": "Portal Web", "sublabel": "Next.js 16" },
+    { "id": "api", "type": "backend", "label": "FastAPI", "sublabel": "Railway Core" },
+    { "id": "db", "type": "database", "label": "SQLite WAL", "sublabel": "Persistencia" },
+    { "id": "ffmpeg", "type": "backend", "label": "FFmpeg Engine", "sublabel": "VAD Silence" },
+    { "id": "whisper", "type": "cloud", "label": "Whisper-1", "sublabel": "OpenAI ASR" },
+    { "id": "summarizer", "type": "security", "label": "Escudo XML", "sublabel": "Cuarentena" },
+    { "id": "gpt", "type": "cloud", "label": "GPT-4o-mini", "sublabel": "Plantillas IA" }
+  ],
+  "segments": [
+    { "from": 150, "to": 310, "label": "Ingesta & Despacho Local" },
+    { "from": 325, "to": 550, "label": "Transcodificación & ASR" },
+    { "from": 565, "to": 820, "label": "Aislamiento Adversarial & Entrega" }
+  ],
+  "messages": [
+    { "from": "user", "to": "client", "y": 175, "label": "Drop archivo multimedia (hasta 1GB)", "variant": "emphasis" },
+    { "from": "client", "to": "api", "y": 220, "label": "POST /api/transcribe/file (summary_type)", "variant": "emphasis" },
+    { "from": "api", "to": "db", "y": 265, "label": "create_job(status='processing')", "variant": "default" },
+    { "from": "api", "to": "ffmpeg", "y": 345, "label": "probe_media + transcode 16kHz", "variant": "emphasis" },
+    { "from": "ffmpeg", "to": "whisper", "y": 395, "label": "Audio Chunks <25MB", "variant": "emphasis" },
+    { "from": "whisper", "to": "ffmpeg", "y": 445, "label": "verbose_json (words + timestamps)", "variant": "return" },
+    { "from": "ffmpeg", "to": "api", "y": 495, "label": "transcript_result (srt, vtt, txt)", "variant": "return" },
+    { "from": "api", "to": "summarizer", "y": 585, "label": "Encapsular en <TRANSCRIPCION_ORIGINAL>", "variant": "security" },
+    { "from": "summarizer", "to": "gpt", "y": 630, "label": "Prompt seguro + Esquema JSON", "variant": "emphasis" },
+    { "from": "gpt", "to": "summarizer", "y": 675, "label": "JSON estructurado (plantilla elegida)", "variant": "return" },
+    { "from": "summarizer", "to": "api", "y": 715, "label": "normalize_summary() garantizado", "variant": "return" },
+    { "from": "api", "to": "db", "y": 755, "label": "update_job(status='completed', result)", "variant": "default" },
+    { "from": "api", "to": "client", "y": 795, "label": "200 OK TranscriptionResponse", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "client", "from": 170, "to": 225, "type": "frontend" },
+    { "participant": "api", "from": 215, "to": 800, "type": "backend" },
+    { "participant": "db", "from": 260, "to": 280, "type": "database" },
+    { "participant": "ffmpeg", "from": 340, "to": 500, "type": "backend" },
+    { "participant": "whisper", "from": 390, "to": 450, "type": "cloud" },
+    { "participant": "summarizer", "from": 580, "to": 720, "type": "security" },
+    { "participant": "gpt", "from": 625, "to": 680, "type": "cloud" },
+    { "participant": "db", "from": 750, "to": 770, "type": "database" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Orquestación Asíncrona sin Bloqueo",
+      "items": [
+        "FastAPI delega la ejecución intensiva a subprocesos worker de anyio",
+        "El bucle de eventos principal responde en menos de 10ms para sondeos y estado",
+        "El trabajo persiste en SQLite garantizando trazabilidad ante desconexiones"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Protocolo Adversarial Estricto",
+      "items": [
+        "El texto transcrito se pone en cuarentena antes de enviarse al modelo de resumen",
+        "Preámbulo explícito instruye ignorar intentos de prompt injection en el audio",
+        "Reparador sintáctico mitiga trailing commas y markdown fences imprevistos"
+      ]
+    }
+  ]
+}

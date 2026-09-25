@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Transcriptor Enterprise - Arquitectura del Sistema",
+    "output": "docs/architecture/architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "flujo-general",
+        "label": "Flujo de Ingesta y Transcripción",
+        "focus": ["user", "browser", "vercel_edge", "fastapi", "ffmpeg", "whisper"],
+        "note": "Traza el recorrido desde la subida del usuario hasta la transcripción precisa en Whisper."
+      },
+      {
+        "id": "procesamiento-audio",
+        "label": "Motor de Audio y Optimización",
+        "focus": ["browser", "ffmpeg", "whisper", "sqlite"],
+        "note": "Extracción en navegador Web Audio, transcodificación a 16kHz mono y chunks VAD."
+      },
+      {
+        "id": "sintesis-adversarial",
+        "label": "Blindaje Adversarial y Síntesis IA",
+        "focus": ["fastapi", "summarizer", "gpt", "sqlite"],
+        "note": "Aislamiento en cuarentena XML, defensa contra prompt injection y las 4 plantillas analíticas."
+      }
+    ]
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "Usuario Corporativo", "sublabel": "Navegador Web", "pos": [50, 290], "size": [130, 60] },
+    { "id": "browser", "type": "frontend", "label": "Transcriptor Portal", "sublabel": "Next.js 16 + Web Audio", "pos": [260, 290], "size": [140, 60], "tag": "cliente" },
+    { "id": "vercel_edge", "type": "cloud", "label": "Vercel Edge Network", "sublabel": "Global CDN & Routing", "pos": [470, 290], "size": [140, 60], "tag": "edge" },
+    { "id": "fastapi", "type": "backend", "label": "FastAPI Core", "sublabel": "Auth & Jobs Engine", "pos": [680, 290], "size": [140, 60], "tag": "railway" },
+    { "id": "ffmpeg", "type": "backend", "label": "FFmpeg Engine", "sublabel": "16kHz Mono / VAD Chunks", "pos": [890, 160], "size": [140, 60], "tag": "audio" },
+    { "id": "summarizer", "type": "backend", "label": "Adversarial Engine", "sublabel": "XML Shield & 4 Templates", "pos": [890, 420], "size": [140, 60], "tag": "analisis" },
+    { "id": "sqlite", "type": "database", "label": "SQLite Database", "sublabel": "WAL Mode / TTL 24h", "pos": [680, 500], "size": [140, 60], "tag": "persistencia" },
+    { "id": "whisper", "type": "cloud", "label": "OpenAI Whisper-1", "sublabel": "verbose_json Timestamps", "pos": [1100, 160], "size": [140, 60], "tag": "openai" },
+    { "id": "gpt", "type": "cloud", "label": "GPT-4o-mini", "sublabel": "JSON Mode Síntesis", "pos": [1100, 420], "size": [140, 60], "tag": "openai" },
+    { "id": "storage", "type": "cloud", "label": "Cloudflare R2 / S3", "sublabel": "Presigned URLs (1GB)", "pos": [260, 500], "size": [140, 60], "tag": "efimero" }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Cliente Web (Navegador)", "wraps": ["user", "browser"], "pad": 16 },
+    { "kind": "region", "label": "Railway Container Environment (Producción)", "wraps": ["fastapi", "ffmpeg", "summarizer", "sqlite"], "pad": 20 },
+    { "kind": "security-group", "label": "OpenAI Commercial API (Zero Data Retention)", "wraps": ["whisper", "gpt"], "pad": 18 }
+  ],
+  "connections": [
+    { "from": "user", "to": "browser", "label": "Subida", "variant": "emphasis" },
+    { "from": "browser", "to": "vercel_edge", "label": "HTTPS", "variant": "emphasis" },
+    { "from": "vercel_edge", "to": "fastapi", "label": "X-API-Key", "variant": "security" },
+    { "from": "fastapi", "to": "sqlite", "label": "Estado & TTL", "variant": "default", "route": "straight", "labelDy": 36 },
+    { "from": "fastapi", "to": "ffmpeg", "label": "Audio Raw", "variant": "emphasis", "route": "orthogonal-h" },
+    { "from": "ffmpeg", "to": "whisper", "label": "Chunks <25MB", "variant": "emphasis", "route": "straight" },
+    { "from": "whisper", "to": "fastapi", "label": "Timestamps", "variant": "default", "fromSide": "top", "toSide": "top", "via": [[1170, 90], [750, 90]], "labelAt": [960, 80] },
+    { "from": "fastapi", "to": "summarizer", "label": "XML Shield", "variant": "security", "route": "orthogonal-h" },
+    { "from": "summarizer", "to": "gpt", "label": "Prompt & JSON", "variant": "emphasis", "route": "straight" },
+    { "from": "browser", "to": "storage", "label": "Presigned", "variant": "dashed", "route": "straight", "labelDy": 36 },
+    { "from": "storage", "to": "fastapi", "label": "Worker Stream", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Arquitectura Híbrida y Serverless Bypass",
+      "items": [
+        "Extracción de audio en navegador (Web Audio API) reduciendo subidas de 1 GB a 20-30 MB",
+        "Frontend interactivo en Vercel Edge con estudio sincronizado y persistencia local",
+        "Motor intensivo de FFmpeg encapsulado en contenedor Docker desplegado en Railway"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Blindaje Adversarial y Plantillas IA",
+      "items": [
+        "Aislamiento de transcripciones en etiquetas XML contra ataques de prompt injection",
+        "Sanitización y autoreparación de defectos sintácticos comunes de JSON en respuestas de LLM",
+        "4 plantillas especializadas: Minuta/Acuerdos, Resumen General, Podcast y Acta Procesal"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Gobernanza, Privacidad y Persistencia",
+      "items": [
+        "API comercial de OpenAI bajo estricta política de Zero Data Retention sin entrenamiento",
+        "Base de datos SQLite en modo WAL para seguimiento persistente y borrado automático por TTL (24h)",
+        "Control de autenticación en cabeceras internas y validación de tipos sin regresión"
+      ]
+    }
+  ]
+}

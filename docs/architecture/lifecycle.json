@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Transcriptor Enterprise - Ciclo de Vida del Trabajo",
+    "output": "docs/architecture/lifecycle.html",
+    "viewBox": [980, 680],
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "ruta-nominal",
+        "label": "Ciclo Nominal de Procesamiento",
+        "focus": ["queued", "extracting", "transcribing", "summarizing", "completed"],
+        "note": "Fases ordenadas desde la creación del trabajo en SQLite hasta la entrega final."
+      },
+      {
+        "id": "aislamiento-y-recuperacion",
+        "label": "Aislamiento Adversarial y Recuperación",
+        "focus": ["transcribing", "quarantined", "summarizing", "recovering", "failed"],
+        "note": "Manejo de barrera de seguridad XML y reparación sintáctica del JSON generado."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "Fases Principales" },
+    { "id": "waiting", "label": "Aislamiento & Filtro" },
+    { "id": "exceptions", "label": "Bucle de Recuperación" },
+    { "id": "terminal", "label": "Estados Terminales" }
+  ],
+  "states": [
+    { "id": "queued", "type": "start", "label": "En Cola", "sublabel": "Registro en SQLite", "lane": "main", "col": 0, "step": "01", "tag": "ingesta" },
+    { "id": "extracting", "type": "active", "label": "Extrayendo", "sublabel": "Web Audio / WAV", "lane": "main", "col": 1, "step": "02", "tag": "cliente" },
+    { "id": "transcribing", "type": "active", "label": "Transcribiendo", "sublabel": "FFmpeg + Whisper", "lane": "main", "col": 2, "step": "03", "tag": "audio" },
+    { "id": "summarizing", "type": "decision", "label": "Sintetizando", "sublabel": "Escudo + GPT-4o-mini", "lane": "main", "col": 3, "step": "04", "tag": "analisis" },
+    { "id": "completed", "type": "success", "label": "Completado", "sublabel": "Studio + Subtítulos", "lane": "main", "col": 4, "step": "05", "tag": "listo" },
+    { "id": "quarantined", "type": "waiting", "label": "En Cuarentena", "sublabel": "Inspección XML", "lane": "waiting", "col": 0, "tag": "escudo" },
+    { "id": "chunk_wait", "type": "waiting", "label": "VAD Wait", "sublabel": "Sincronía de cortes", "lane": "waiting", "col": 1, "tag": "pausa" },
+    { "id": "recovering", "type": "failure", "label": "Reparando JSON", "sublabel": "Fallo sintáctico LLM", "lane": "exceptions", "col": 0, "yOffset": 78, "tag": "reparable" },
+    { "id": "failed", "type": "failure", "label": "Fallido", "sublabel": "Error irrecuperable", "lane": "terminal", "col": 0, "tag": "terminal" },
+    { "id": "expired", "type": "failure", "label": "Expirado (TTL)", "sublabel": "Limpieza 24h", "lane": "terminal", "col": 1, "tag": "terminal" }
+  ],
+  "transitions": [
+    { "id": "transcribing-quarantined", "from": "transcribing", "to": "quarantined", "variant": "security", "fromSide": "bottom", "toSide": "top", "route": "straight" },
+    { "id": "summarizing-chunkwait", "from": "summarizing", "to": "chunk_wait", "variant": "default", "route": "drop" },
+    { "id": "transcribing-recovering", "from": "transcribing", "to": "recovering", "variant": "security", "fromSide": "left", "toSide": "left", "via": [[320, 157], [320, 385]] },
+    { "id": "recovering-transcribing", "from": "recovering", "to": "transcribing", "variant": "emphasis", "fromSide": "left", "toSide": "top", "via": [[20, 385], [20, 80], [402, 80]] },
+    { "id": "chunkwait-expired", "from": "chunk_wait", "to": "expired", "variant": "security", "fromSide": "bottom", "toSide": "top", "route": "straight" },
+    { "id": "quarantined-failed", "from": "quarantined", "to": "failed", "variant": "security", "fromSide": "bottom", "toSide": "top", "via": [[480, 336], [480, 432], [402, 432]] }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Carril Principal de Vida Útil",
+      "items": [
+        "El trabajo progresa en 5 fases secuenciales desde En Cola hasta Completado",
+        "El estado 'Completado' es un hito de éxito con persistencia duradera",
+        "El cliente consulta el progreso en tiempo real mediante sondeo asíncrono"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Aislamiento y Pausas Operativas",
+      "items": [
+        "El estado 'En Cuarentena' valida y desactiva posibles inyecciones en el audio",
+        "Los cortes por silencio VAD se enlazan sin bloquear el hilo principal",
+        "Los estados de espera no interrumpen el ciclo de vida del trabajo"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Recuperación y Salidas Terminales",
+      "items": [
+        "La reparación de JSON rescata respuestas del LLM con errores sintácticos",
+        "Errores insalvables desembocan en el estado terminal 'Fallido'",
+        "El proceso de limpieza periódica expira y elimina trabajos tras 24 horas"
+      ]
+    }
+  ]
+}
