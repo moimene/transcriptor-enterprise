@@ -135,7 +135,7 @@ class TranscriptionService:
                 previous_text_tail = chunk_text[-180:]
 
             # Adjust segment timestamps
-            raw_segments = resp.get("segments", [])
+            raw_segments = resp.get("segments") or []
             for seg in raw_segments:
                 seg_dict = {
                     "id": len(merged_segments),
@@ -147,7 +147,7 @@ class TranscriptionService:
                 merged_segments.append(seg_dict)
 
             # Adjust word timestamps if available
-            raw_words = resp.get("words", [])
+            raw_words = resp.get("words") or []
             for w in raw_words:
                 merged_words.append({
                     "word": w.get("word", ""),
