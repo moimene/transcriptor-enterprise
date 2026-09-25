@@ -29,12 +29,57 @@ export interface ActionItem {
   deadline: string;
 }
 
+export interface TopicItem {
+  title: string;
+  description: string;
+  timestamp?: string;
+}
+
+export interface QuoteItem {
+  quote: string;
+  speaker?: string;
+  context?: string;
+}
+
+export interface DeclaredFactItem {
+  fact: string;
+  speaker?: string;
+  context?: string;
+}
+
+export interface ContradictionItem {
+  issue: string;
+  detail: string;
+  parties_involved?: string[];
+}
+
+export interface KeyQuestionItem {
+  question: string;
+  answer: string;
+  implication?: string;
+}
+
+export type SummaryType = "reuniones" | "general" | "podcast" | "interrogatorios";
+
 export interface MeetingSummary {
+  summary_type?: SummaryType;
   title: string;
   summary: string;
   key_points: string[];
   action_items: ActionItem[];
   decisions: string[];
+  // General & Podcast
+  topics?: TopicItem[];
+  conclusions?: string[];
+  // Podcast
+  quotes?: QuoteItem[];
+  takeaways?: string[];
+  // Interrogatorios
+  declared_facts?: DeclaredFactItem[];
+  contradictions?: ContradictionItem[];
+  key_questions?: KeyQuestionItem[];
+  evidence_assessment?: string;
+  error?: boolean;
 }
 
 export interface MediaInfo {

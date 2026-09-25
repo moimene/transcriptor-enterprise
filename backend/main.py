@@ -104,6 +104,7 @@ class TranscribeStorageRequest(BaseModel):
     language: Optional[str] = None
     prompt: Optional[str] = None
     generate_summary: bool = True
+    summary_type: str = Field("reuniones", description="Plantilla de resumen: 'reuniones', 'general', 'podcast', 'interrogatorios'")
     delete_source_after: bool = True
 
 
@@ -125,7 +126,8 @@ def health_check():
         "storage_configured": storage_ok,
         "database_persistence": True,
         "whisper_model": settings.WHISPER_MODEL,
-        "summary_model": settings.SUMMARY_MODEL
+        "summary_model": settings.SUMMARY_MODEL,
+        "summary_types": ["reuniones", "general", "podcast", "interrogatorios"]
     }
 
 
@@ -160,6 +162,7 @@ def run_pipeline(
     language: Optional[str] = None,
     prompt: Optional[str] = None,
     generate_summary: bool = True,
+    summary_type: str = "reuniones",
     job_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -201,9 +204,10 @@ def run_pipeline(
         summary_data = None
         if generate_summary and transcript_result.get("text"):
             notify("summarizing", 80)
-            logger.info("Generando minuta ejecutiva con gpt-4o-mini...")
-            summary_data = summarizer_service.generate_meeting_notes(
+            logger.info(f"Generando resumen ({summary_type}) con {settings.SUMMARY_MODEL}...")
+            summary_data = summarizer_service.generate_summary(
                 transcript_text=transcript_result["text"],
+                summary_type=summary_type,
                 language=transcript_result.get("language", "es")
             )
 
@@ -258,7 +262,8 @@ def transcribe_uploaded_file(
     file: UploadFile = File(...),
     language: Optional[str] = Form(None),
     prompt: Optional[str] = Form(None),
-    generate_summary: bool = Form(True)
+    generate_summary: bool = Form(True),
+    summary_type: str = Form("reuniones")
 ):
     """
     Direct upload endpoint.
@@ -291,6 +296,7 @@ def transcribe_uploaded_file(
             language=language,
             prompt=prompt,
             generate_summary=generate_summary,
+            summary_type=summary_type,
             job_id=job_id
         )
         result["job_id"] = job_id
@@ -317,6 +323,7 @@ def background_storage_worker(
     language: Optional[str],
     prompt: Optional[str],
     generate_summary: bool,
+    summary_type: str,
     delete_source_after: bool
 ):
     """Worker task executed in background threadpool for large storage files."""
@@ -332,6 +339,7 @@ def background_storage_worker(
             language=language,
             prompt=prompt,
             generate_summary=generate_summary,
+            summary_type=summary_type,
             job_id=job_id
         )
     except Exception as e:
@@ -388,6 +396,7 @@ def transcribe_from_storage(
         language=payload.language,
         prompt=payload.prompt,
         generate_summary=payload.generate_summary,
+        summary_type=payload.summary_type,
         delete_source_after=payload.delete_source_after
     )
 

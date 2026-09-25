@@ -1,8 +1,21 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { UploadCloud, FileAudio, FileVideo, Zap, Sparkles, AlertCircle, Settings2 } from "lucide-react";
+import {
+  UploadCloud,
+  FileAudio,
+  FileVideo,
+  Zap,
+  Sparkles,
+  AlertCircle,
+  Settings2,
+  Briefcase,
+  FileText,
+  Mic,
+  Scale
+} from "lucide-react";
 import { extractAudioFromVideo } from "@/lib/audioExtractor";
+import { SummaryType } from "@/lib/types";
 
 interface UploadZoneProps {
   onStartProcessing: (
@@ -12,6 +25,7 @@ interface UploadZoneProps {
       prompt: string;
       generateSummary: boolean;
       useClientExtraction: boolean;
+      summaryType: SummaryType;
     }
   ) => void;
   isProcessing: boolean;
@@ -23,6 +37,7 @@ export function UploadZone({ onStartProcessing, isProcessing }: UploadZoneProps)
   const [language, setLanguage] = useState("es");
   const [prompt, setPrompt] = useState("");
   const [generateSummary, setGenerateSummary] = useState(true);
+  const [summaryType, setSummaryType] = useState<SummaryType>("reuniones");
   const [useClientExtraction, setUseClientExtraction] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -81,7 +96,8 @@ export function UploadZone({ onStartProcessing, isProcessing }: UploadZoneProps)
       language,
       prompt,
       generateSummary,
-      useClientExtraction
+      useClientExtraction,
+      summaryType
     });
   };
 
@@ -227,12 +243,136 @@ export function UploadZone({ onStartProcessing, isProcessing }: UploadZoneProps)
               <div className="flex items-center space-x-1.5">
                 <Sparkles className="w-4 h-4 text-violet-500" />
                 <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                  Generar Minuta y Acuerdos con GPT-4o-mini
+                  Generar Análisis con GPT-4o-mini
                 </span>
               </div>
             </label>
           </div>
         </div>
+
+        {/* AI Summary Template Selector */}
+        {generateSummary && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Plantilla de Análisis IA
+              </label>
+              <span className="text-[11px] text-zinc-500">
+                Selecciona el enfoque según la naturaleza de la grabación
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {/* Option 1: reuniones */}
+              <button
+                type="button"
+                onClick={() => setSummaryType("reuniones")}
+                className={`p-3 text-left rounded-xl border transition-all flex flex-col justify-between ${
+                  summaryType === "reuniones"
+                    ? "border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-1 ring-indigo-600 shadow-xs"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center space-x-2 mb-1.5">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      summaryType === "reuniones"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                    }`}
+                  >
+                    <Briefcase className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold">Minuta & Acuerdos</span>
+                </div>
+                <p className="text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
+                  Reuniones ejecutivas, tareas y compromisos con plazos.
+                </p>
+              </button>
+
+              {/* Option 2: general */}
+              <button
+                type="button"
+                onClick={() => setSummaryType("general")}
+                className={`p-3 text-left rounded-xl border transition-all flex flex-col justify-between ${
+                  summaryType === "general"
+                    ? "border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-1 ring-indigo-600 shadow-xs"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center space-x-2 mb-1.5">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      summaryType === "general"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold">Resumen General</span>
+                </div>
+                <p className="text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
+                  Síntesis integral, bloques temáticos y conclusiones clave.
+                </p>
+              </button>
+
+              {/* Option 3: podcast */}
+              <button
+                type="button"
+                onClick={() => setSummaryType("podcast")}
+                className={`p-3 text-left rounded-xl border transition-all flex flex-col justify-between ${
+                  summaryType === "podcast"
+                    ? "border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-1 ring-indigo-600 shadow-xs"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center space-x-2 mb-1.5">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      summaryType === "podcast"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                    }`}
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold">Podcast / Charla</span>
+                </div>
+                <p className="text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
+                  Momentos memorables, citas textuales y lecciones aprendidas.
+                </p>
+              </button>
+
+              {/* Option 4: interrogatorios */}
+              <button
+                type="button"
+                onClick={() => setSummaryType("interrogatorios")}
+                className={`p-3 text-left rounded-xl border transition-all flex flex-col justify-between ${
+                  summaryType === "interrogatorios"
+                    ? "border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-1 ring-indigo-600 shadow-xs"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center space-x-2 mb-1.5">
+                  <div
+                    className={`p-1.5 rounded-lg ${
+                      summaryType === "interrogatorios"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                    }`}
+                  >
+                    <Scale className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold">Interrogatorio</span>
+                </div>
+                <p className="text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
+                  Hechos declarados, contradicciones y valoración probatoria.
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Advanced Options Accordion */}
         <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 bg-zinc-50/50 dark:bg-zinc-900/30">

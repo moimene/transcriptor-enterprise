@@ -6,7 +6,7 @@ import { UploadZone } from "@/components/UploadZone";
 import { ProgressTracker } from "@/components/ProgressTracker";
 import { TranscriptionStudio } from "@/components/TranscriptionStudio";
 import { extractAudioFromVideo } from "@/lib/audioExtractor";
-import { ProcessingStep, TranscriptionResponse } from "@/lib/types";
+import { ProcessingStep, TranscriptionResponse, SummaryType } from "@/lib/types";
 import { ShieldCheck, Zap, Lock, RefreshCw, BookmarkCheck, Trash2 } from "lucide-react";
 
 const STORAGE_KEY = "transcriptor_saved_session";
@@ -56,6 +56,7 @@ export default function Home() {
       prompt: string;
       generateSummary: boolean;
       useClientExtraction: boolean;
+      summaryType: SummaryType;
     }
   ) => {
     setErrorDetails(null);
@@ -99,6 +100,7 @@ export default function Home() {
       if (options.language) formData.append("language", options.language);
       if (options.prompt) formData.append("prompt", options.prompt);
       formData.append("generate_summary", String(options.generateSummary));
+      if (options.summaryType) formData.append("summary_type", options.summaryType);
 
       // Animated progress transition during server processing
       setStep("compressing");
@@ -135,7 +137,14 @@ export default function Home() {
 
       if (options.generateSummary) {
         setStep("summarizing");
-        setStatusMessage("GPT-4o-mini generando puntos clave y acuerdos...");
+        const typeLabels: Record<string, string> = {
+          reuniones: "minuta ejecutiva y acuerdos",
+          general: "resumen general y síntesis",
+          podcast: "citas memorables y momentos destacados",
+          interrogatorios: "hechos, contradicciones y prueba legal",
+        };
+        const label = typeLabels[options.summaryType] || "análisis y resumen";
+        setStatusMessage(`GPT-4o-mini generando ${label}...`);
         setProgressPercent(95);
       }
 

@@ -6,6 +6,7 @@ from config import settings
 import database
 
 client = TestClient(app)
+database.init_db()
 
 
 def test_health_endpoint():
@@ -17,6 +18,7 @@ def test_health_endpoint():
     assert data["ffprobe_available"] is True
     assert data["whisper_model"] == "whisper-1"
     assert data["database_persistence"] is True
+    assert data["summary_types"] == ["reuniones", "general", "podcast", "interrogatorios"]
 
 
 def test_invalid_job_id():
@@ -119,3 +121,56 @@ def test_database_persistence_and_cleanup():
     deleted_count = database.cleanup_expired_jobs()
     assert deleted_count >= 1
     assert database.get_job(test_id) is None
+
+
+def test_pipeline_summary_type_dispatch():
+    from unittest.mock import patch, MagicMock
+    from main import run_pipeline
+
+    with patch("main.audio_processor.probe_media") as mock_probe, \
+         patch("main.audio_processor.prepare_audio_for_transcription") as mock_prep, \
+         patch("main.transcription_service.transcribe_and_merge") as mock_transcribe, \
+         patch("main.summarizer_service.generate_summary") as mock_summary:
+
+        mock_probe.return_value = {
+            "has_audio": True,
+            "duration": 60.0,
+            "has_video": False,
+            "format": "mp3"
+        }
+        mock_prep.return_value = ["/tmp/fake_chunk.mp3"]
+        mock_transcribe.return_value = {
+            "text": "Transcripción de una reunión de planificación.",
+            "language": "es",
+            "duration": 60.0,
+            "segments": [{"id": 0, "start": 0.0, "end": 1.0, "text": "Hola"}],
+            "srt": "1\n00:00:00,000 --> 00:00:01,000\nHola",
+            "vtt": "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHola",
+            "txt": "Hola"
+        }
+        mock_summary.return_value = {
+            "summary_type": "podcast",
+            "title": "Episodio de Prueba",
+            "summary": "Sinopsis del episodio",
+            "key_points": ["Punto 1"],
+            "quotes": [{"quote": "Cita clave", "speaker": "Invitado"}],
+            "takeaways": ["Lección 1"],
+            "action_items": [],
+            "decisions": []
+        }
+
+        # Call with summary_type="podcast"
+        result = run_pipeline(
+            input_path="/tmp/fake_input.mp3",
+            summary_type="podcast"
+        )
+
+        assert result["status"] == "completed"
+        assert result["summary"]["summary_type"] == "podcast"
+        assert result["summary"]["quotes"][0]["quote"] == "Cita clave"
+        mock_summary.assert_called_once_with(
+            transcript_text="Transcripción de una reunión de planificación.",
+            summary_type="podcast",
+            language="es"
+        )
+
